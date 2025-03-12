@@ -12,26 +12,96 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_groq import ChatGroq
 from langchain_community.document_loaders import PyPdfLoader
 from langchain_core.runnable.history import RunnableWithMessageHistory
+from langchain_community.vectorstores import FAISS
 import os
 from langchain.chat_models import init_chat_model
+from langchain_core.documents import Document
+from typing_extensions import List,TypedDict
+from langgraph.checkpoint.memory import MemorySaver
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-os.environ['HF_TOKEN']=os.getenv("HF_TOKEN")
-os.environ['GROQ_API_KEY']=os.getenv("GROQ_API_KEY")
-embeddings=HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+groq_api_key=st.secrets.get("GROQ_API_KEY",os.getenv("GROQ_API_KEY"))
+
+if not groq_api_key:
+    st.error("GROQ API KEY is missing!")
+    st.stop()
+
+llm=ChatGroq(model_name="llama3-8b-8192",api_key=groq_api_key)
+
+prompt=ChatPromptTemplate.from_template(
+    """
+    Answer the question based on the following context:
+    <context>
+    {context}
+    </context>
+
+    Question:{input}
+    """
+)
+
+def create_vector_embedding():
+    if "vectors" not in st.session_state:
+        if 'uploaded_file' not in st.session_state:
+            st.error("Please upload the file")
+            return
+        
+        uploaded_file=st.session_state.uploaded_file
+
+        file_path=f'temp_{uploaded_file.name}'
+        with open(file_path,"wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        loader=PyPdfLoader(file_path)
+        docs=loader.load
+
+        text_splitter=RecursiveCharacterTextSplitter(chunk_size=1000,chunk_overlap=200)
+        final_docs=text_splitter.split_documents(docs)
+
+        embeddings=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        st.session_state.vectors=FAISS(final_docs,embeddings)
+
+        st.success("Vector DB is ready")
 
 
 st.title("Conversational RAG with PDF upload")
-st.write("Upload PDF and chat with their content")
+uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+if uploaded_file:
+    st.session_state.uploaded_file = uploaded_file  # Store file persistently
 
-llm=ChatGroq(groq_api_key="GROQ_API_KEY",model_name="Gemma-9b-It")
+if st.button("Document Embedding"):
+    create_vector_embedding()
 
-session_id=st.text_input("Session Id",value="default_session")
+user_prompt = st.text_input("Enter your query.......")
 
-if 'store' not in st.session_state:
-    st.session_state.store={}
+class State(TypedDict):
+    user_prompt:str
+    context:List[Document]
+    respone:str
 
-uploaded_files=st.file_uploader("Choose A Pdf file", type="pdf",accept_multiple_files=False)
 
+def retrieve_docs(state:State):
+
+    if user_prompt:
+        if "vectors" not in st.session_state:
+            st.error("Please create vector database first by clicking 'Document Embedding'.")
+        else:
+            
+            retriever=st.session_state.vectors.as_retriever()
+            ret_doc=st.session_state.retriever.invoke(user_prompt)
+
+            return {"context":ret_doc}
+
+def generate(state:State):
+    if "ret_doc" not in st.session_state:
+        st.error("Can't find for retrieved documents. Please provide with the retrieved documents for response generation")
+    else:
+
+        document_chain=create_stuff_documents_chain(llm,prompt)
+        rag_chain=create_retrieval_chain(retriever,document_chain)
+
+
+        return {"response":rag_chain}
+        
