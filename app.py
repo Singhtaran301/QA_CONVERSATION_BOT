@@ -1,6 +1,6 @@
 import streamlit as st
 import langchain
-from langchain_chroma import Chroma
+
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -10,9 +10,12 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_history_aware_retriever
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_groq import ChatGroq
-from langchain_community.document_loaders import PyPdfLoader
-from langchain_core.runnable.history import RunnableWithMessageHistory
+from langchain_community.document_loaders import PyPDFLoader
+
 from langchain_community.vectorstores import FAISS
+from langgraph.graph import StateGraph, MessagesState
+from langgraph.graph import END,START
+
 import os
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
@@ -22,8 +25,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from dotenv import load_dotenv
 
 load_dotenv()
-
-groq_api_key=st.secrets.get("GROQ_API_KEY",os.getenv("GROQ_API_KEY"))
+groq_api_key=os.getenv("GROQ_API_KEY")
+#groq_api_key=st.secrets.get("GROQ_API_KEY",os.getenv("GROQ_API_KEY"))
 
 if not groq_api_key:
     st.error("GROQ API KEY is missing!")
@@ -108,7 +111,7 @@ def generate(state:State):
 graph=StateGraph(state_schema=MessagesState)
 
 graph.add_edge(START,retrieve)
-graph.add_node("retrive",retrieve_docs)
+graph.add_node("retrieve",retrieve_docs)
 graph.add_node("generte",generate)
 graph.add_edge(generate,END)
 
