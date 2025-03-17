@@ -104,4 +104,16 @@ def generate(state:State):
 
 
         return {"response":rag_chain}
+
+graph=StateGraph(state_schema=MessagesState)
+
+graph.add_edge(START,retrieve)
+graph.add_node("retrive",retrieve_docs)
+graph.add_node("generte",generate)
+graph.add_edge(generate,END)
+
+memory=MemorySaver()
+app=graph.compile(checkpointer=memory)
+
+
         
