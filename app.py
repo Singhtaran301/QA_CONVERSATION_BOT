@@ -38,10 +38,10 @@ prompt=ChatPromptTemplate.from_template(
     """
     Answer the question based on the following context:
     <context>
-    {context}
+    {docs}
     </context>
 
-    Question:{input}
+    Question:{question}
     """
 )
 
@@ -64,7 +64,8 @@ def create_vector_embedding():
         final_docs=text_splitter.split_documents(docs)
 
         embeddings=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        st.session_state.vectors=FAISS(final_docs,embeddings)
+        st.session_state.vector_store=FAISS(final_docs,embeddings)
+        st.session_state.retriever=vector_store.as_retriever()
 
         st.success("Vector DB is ready")
 
@@ -80,43 +81,46 @@ if st.button("Document Embedding"):
 user_prompt = st.text_input("Enter your query.......")
 
 class State(TypedDict):
-    user_prompt:str
-    context:List[Document]
-    respone:str
+    question:str
+    response:str
+    documents:List[str]
 
 
-def retrieve_docs(state:State):
+def retrieve_docs(State):
 
-    if user_prompt:
-        if "vectors" not in st.session_state:
+    if question:
+        if "vector_store" not in st.session_state:
             st.error("Please create vector database first by clicking 'Document Embedding'.")
         else:
             
-            retriever=st.session_state.vectors.as_retriever()
-            ret_doc=st.session_state.retriever.invoke(user_prompt)
+            question=state[question]
+            docs=retriever.invoke(question)
 
-            return {"context":ret_doc}
+            return {"documents":docs}
 
-def generate(state:State):
-    if "ret_doc" not in st.session_state:
+def generate(State):
+    if "docs" not in st.session_state:
         st.error("Can't find for retrieved documents. Please provide with the retrieved documents for response generation")
     else:
 
-        document_chain=create_stuff_documents_chain(llm,prompt)
-        rag_chain=create_retrieval_chain(retriever,document_chain)
+        question=state[question]
+        docs=retriever.invoke(question)
+
+        rag_chain=prompt|llm|StrOutputParser()
+
+        response=rag_chain.invoke(question,docs)
 
 
-        return {"response":rag_chain}
+        return {"response":response}
 
-graph=StateGraph(state_schema=MessagesState)
+graph=StateGraph(State)
 
 graph.add_edge(START,retrieve)
 graph.add_node("retrieve",retrieve_docs)
 graph.add_node("generte",generate)
 graph.add_edge(generate,END)
 
-memory=MemorySaver()
-app=graph.compile(checkpointer=memory)
+app=graph.compile()
 
 
         
