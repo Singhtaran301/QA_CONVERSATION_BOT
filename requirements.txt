@@ -10,7 +10,7 @@ ipykernel
 bs4
 arxiv
 pymupdf
-langchain_chroma
+
 chromadb
 sentence-transformers
 faiss-cpu
