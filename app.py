@@ -26,7 +26,8 @@ st.title("Conversational RAG With PDF uplaods and chat history")
 st.write("Upload Pdf's and chat with their content")
 
 ## Input the Groq API Key
-api_key = os.getenv("GROQ_API_KEY")
+
+api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
 
 if not api_key:
     st.error("GROQ API KEY is missing!")
