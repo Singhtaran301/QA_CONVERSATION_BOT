@@ -12,6 +12,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 import os
+from langchain_community.vectorstores import FAISS
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -61,7 +62,7 @@ if api_key:
     # Split and create embeddings for the documents
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
         splits = text_splitter.split_documents(documents)
-        vectorstore = Chroma.from_documents(documents=splits, embedding=embeddings)
+        vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
         retriever = vectorstore.as_retriever()    
 
         contextualize_q_system_prompt=(
@@ -125,6 +126,6 @@ if api_key:
                     "configurable": {"session_id":session_id}
                 },  # constructs a key "abc123" in `store`.
             )
-            st.write(st.session_state.store)
+            
             st.write("Assistant:", response['answer'])
-            st.write("Chat History:", session_history.messages)
+            
